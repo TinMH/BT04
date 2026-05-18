@@ -101,7 +101,6 @@ app.post('/api/products/:id/comments', async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy sản phẩm.' });
     }
 
-    // Create the new comment
     await Comment.create({
       user: user.trim(),
       rating: Number(rating),
@@ -110,7 +109,6 @@ app.post('/api/products/:id/comments', async (req, res) => {
       productId
     }, { transaction });
 
-    // Fetch all comments for this product to recalculate the average rating
     const allComments = await Comment.findAll({
       where: { productId },
       transaction
@@ -119,13 +117,11 @@ app.post('/api/products/:id/comments', async (req, res) => {
     const sumRatings = allComments.reduce((sum, c) => sum + c.rating, 0);
     const avgRating = parseFloat((sumRatings / allComments.length).toFixed(1));
 
-    // Update product rating
     product.rating = avgRating;
     await product.save({ transaction });
 
     await transaction.commit();
 
-    // Fetch the updated products list to return to the frontend
     const updatedProducts = await getProductsWithComments();
     res.json(updatedProducts);
   } catch (error) {
@@ -157,7 +153,6 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Tài khoản hoặc mật khẩu không chính xác.' });
     }
 
-    // Return member info without sensitive details (though password is mock in this project)
     res.json({
       username: member.username,
       name: member.name,
@@ -308,7 +303,7 @@ app.get('/api/categories/:categoryId/products', async (req, res) => {
 
   try {
     const whereClause = categoryId === 'all' ? {} : { categoryId };
-    
+
     // Find all matching products with pagination and total count
     const { count, rows: products } = await Product.findAndCountAll({
       where: whereClause,
