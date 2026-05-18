@@ -491,7 +491,7 @@ export default function App() {
                     >
                       Tất cả phím cơ
                     </button>
-                    {categories.map((cat) => (
+                    {categories.filter(cat => cat.id !== 'all').map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setSelectedCategory(cat.id)}

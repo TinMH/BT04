@@ -112,7 +112,7 @@ export default function CategoryLazyLoad({
               )}
             </button>
 
-            {categories.map((cat) => (
+            {categories.filter(cat => cat.id !== 'all').map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCat(cat.id)}
