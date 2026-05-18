@@ -8,21 +8,15 @@ import Member from './Member.js';
 import Order from './Order.js';
 import OrderItem from './OrderItem.js';
 
-// --- ASSOCIATIONS & RELATIONSHIPS ---
-
-// Category <-> Product
 Category.hasMany(Product, { foreignKey: 'categoryId' });
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
 
-// Product <-> Comment
 Product.hasMany(Comment, { foreignKey: 'productId', as: 'comments', onDelete: 'CASCADE' });
 Comment.belongsTo(Product, { foreignKey: 'productId' });
 
-// Order <-> OrderItem
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items', onDelete: 'CASCADE' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 
-// OrderItem <-> Product
 Product.hasMany(OrderItem, { foreignKey: 'productId' });
 OrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
 
