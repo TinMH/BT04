@@ -1,4 +1,3 @@
-// Mock Database for Custom Mechanical Keyboard e-commerce store
 export const categories = [
   { id: 'all', name: 'Tất cả Layout' },
   { id: '60-percent', name: 'Layout 60% (Siêu Nhỏ Gọn)' },
