@@ -26,6 +26,8 @@ import ArticleDetail from './components/ArticleDetail';
 import LoginModal from './components/LoginModal';
 import CartDrawer from './components/CartDrawer';
 import InvoiceModal from './components/InvoiceModal';
+import CategoryLazyLoad from './components/CategoryLazyLoad';
+import TopProductsHorizontal from './components/TopProductsHorizontal';
 
 // Icons for App Layout
 import { 
@@ -204,7 +206,7 @@ export default function App() {
   });
 
   // Navigate to detailed single Product Page
-  const handleProductClick = (productId) => {
+  const handleProductClick = async (productId) => {
     setSelectedProductId(productId);
     setView('product');
     setQuantity(1);
@@ -214,6 +216,19 @@ export default function App() {
     if (pr) {
       setConfigSwitch(pr.switchType.includes('Linear') ? 'Linear (Êm Ái, Trơn Tru)' : 'Tactile (Khấc Cản, Đầm Tay)');
       setConfigColorway('Obsidian Black');
+    }
+
+    try {
+      await ProductRepository.incrementViewCount(productId);
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p.id === productId 
+            ? { ...p, viewCount: (p.viewCount || 0) + 1 } 
+            : p
+        )
+      );
+    } catch (err) {
+      console.error("Failed to increment product view count:", err);
     }
 
     // Scroll up
@@ -427,6 +442,13 @@ export default function App() {
               setShowLoginModal={setShowLoginModal}
             />
 
+            {/* Top 10 Best Selling & Most Viewed Horizontal Paginated Sections */}
+            <TopProductsHorizontal 
+              handleProductClick={handleProductClick}
+              handleAddToCart={handleAddToCart}
+              categories={categories}
+            />
+
             {/* Grid & Sidebar filters split section */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
               
@@ -564,6 +586,14 @@ export default function App() {
             </section>
 
           </div>
+        )}
+
+        {view === 'category-lazyload' && (
+          <CategoryLazyLoad 
+            categories={categories}
+            handleProductClick={handleProductClick}
+            handleAddToCart={handleAddToCart}
+          />
         )}
 
         {view === 'product' && activeProduct && (

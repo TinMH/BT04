@@ -36,12 +36,18 @@ export default function Navbar({
         </div>
 
         {/* Navigation Links */}
-        <nav className="hidden md:flex items-center gap-8 font-medium text-slate-300">
+        <nav className="hidden md:flex items-center gap-7 font-medium text-slate-300">
           <button 
             onClick={() => { setView('home'); resetFilters(); }} 
             className={`hover:text-purple-400 transition-colors duration-200 cursor-pointer ${view === 'home' && searchQuery === '' && tagFilter === 'all' ? 'text-purple-400 font-bold' : ''}`}
           >
             Trang Chủ
+          </button>
+          <button 
+            onClick={() => { setView('category-lazyload'); resetFilters(); }} 
+            className={`hover:text-purple-400 transition-colors duration-200 cursor-pointer ${view === 'category-lazyload' ? 'text-purple-400 font-bold' : ''}`}
+          >
+            Danh Mục
           </button>
           <button 
             onClick={() => { setView('home'); resetFilters(); setTagFilter('Khuyến mãi'); }} 

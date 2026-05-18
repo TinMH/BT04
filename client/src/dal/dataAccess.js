@@ -33,6 +33,56 @@ export const ProductRepository = {
       console.error("Error adding review comment", e);
       throw e;
     }
+  },
+
+  // Fetch paginated products by category (for Lazy Loading)
+  getProductsByCategory: async (categoryId, page = 1, limit = 4) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/categories/${categoryId}/products?page=${page}&limit=${limit}`);
+      if (!response.ok) throw new Error('Không thể tải sản phẩm theo danh mục');
+      return await response.json(); // Returns { products, totalCount, page, limit, hasMore }
+    } catch (e) {
+      console.error("Error fetching products by category", e);
+      throw e;
+    }
+  },
+
+  // Increment view count when a product is clicked
+  incrementViewCount: async (productId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/${productId}/view`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Không thể tăng lượt xem sản phẩm');
+      return await response.json(); // Returns { success: true, viewCount }
+    } catch (e) {
+      console.error("Error incrementing view count", e);
+      throw e;
+    }
+  },
+
+  // Fetch Top 10 Best Selling products paginated (for horizontal display)
+  getTopSellingProducts: async (page = 1, limit = 4) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/top-selling?page=${page}&limit=${limit}`);
+      if (!response.ok) throw new Error('Không thể tải sản phẩm bán chạy nhất');
+      return await response.json();
+    } catch (e) {
+      console.error("Error fetching top selling products", e);
+      throw e;
+    }
+  },
+
+  // Fetch Top 10 Most Viewed products paginated (for horizontal display)
+  getMostViewedProducts: async (page = 1, limit = 4) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/products/most-viewed?page=${page}&limit=${limit}`);
+      if (!response.ok) throw new Error('Không thể tải sản phẩm xem nhiều nhất');
+      return await response.json();
+    } catch (e) {
+      console.error("Error fetching most viewed products", e);
+      throw e;
+    }
   }
 };
 

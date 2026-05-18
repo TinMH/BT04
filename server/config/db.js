@@ -1,15 +1,19 @@
 import { Sequelize } from 'sequelize';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Load environment configurations
+dotenv.config();
 
-// Initialize Sequelize to connect to the SQLite file
-const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: path.join(__dirname, '../database.sqlite'),
-  logging: false, // Set to console.log to see SQL queries in development
-});
+const sequelize = new Sequelize(
+  process.env.DB_NAME || 'forgekeyboards',
+  process.env.DB_USER || 'root',
+  process.env.DB_PASSWORD || '',
+  {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT) || 3306,
+    dialect: 'mysql',
+    logging: false,
+  }
+);
 
 export default sequelize;

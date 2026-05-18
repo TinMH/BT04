@@ -299,6 +299,123 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+// 8. Products by Category (Lazy loading / Pagination) API
+app.get('/api/categories/:categoryId/products', async (req, res) => {
+  const categoryId = req.params.categoryId;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 4; // default limit is 4 to clearly demonstrate lazy loading
+  const offset = (page - 1) * limit;
+
+  try {
+    const whereClause = categoryId === 'all' ? {} : { categoryId };
+    
+    // Find all matching products with pagination and total count
+    const { count, rows: products } = await Product.findAndCountAll({
+      where: whereClause,
+      include: [{
+        model: Comment,
+        as: 'comments',
+      }],
+      order: [['id', 'ASC']],
+      limit,
+      offset
+    });
+
+    res.json({
+      products,
+      totalCount: count,
+      page,
+      limit,
+      hasMore: offset + products.length < count
+    });
+  } catch (error) {
+    console.error('Error fetching paginated products:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// 9. Increment Product View Count
+app.post('/api/products/:id/view', async (req, res) => {
+  const productId = req.params.id;
+  try {
+    const product = await Product.findByPk(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm.' });
+    }
+    product.viewCount = (product.viewCount || 0) + 1;
+    await product.save();
+    res.json({ success: true, viewCount: product.viewCount });
+  } catch (error) {
+    console.error('Error incrementing view count:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// 10. Top 10 Best Selling Products API
+app.get('/api/products/top-selling', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 4; // paginated by limit for horizontal pages
+  const offset = (page - 1) * limit;
+  try {
+    // We want the absolute top 10 best-selling items, but sliced according to pagination
+    // Fetch all top 10 first to ensure we strictly stay within the Top 10 limits
+    const allTopTen = await Product.findAll({
+      include: [{
+        model: Comment,
+        as: 'comments',
+      }],
+      order: [['soldCount', 'DESC']],
+      limit: 10
+    });
+
+    const totalCount = allTopTen.length;
+    const paginatedProducts = allTopTen.slice(offset, offset + limit);
+
+    res.json({
+      products: paginatedProducts,
+      totalCount,
+      page,
+      limit,
+      hasMore: offset + paginatedProducts.length < totalCount
+    });
+  } catch (error) {
+    console.error('Error fetching top selling products:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// 11. Top 10 Most Viewed Products API
+app.get('/api/products/most-viewed', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 4; // paginated by limit for horizontal pages
+  const offset = (page - 1) * limit;
+  try {
+    // Fetch all top 10 first to ensure we strictly stay within the Top 10 limits
+    const allTopTen = await Product.findAll({
+      include: [{
+        model: Comment,
+        as: 'comments',
+      }],
+      order: [['viewCount', 'DESC']],
+      limit: 10
+    });
+
+    const totalCount = allTopTen.length;
+    const paginatedProducts = allTopTen.slice(offset, offset + limit);
+
+    res.json({
+      products: paginatedProducts,
+      totalCount,
+      page,
+      limit,
+      hasMore: offset + paginatedProducts.length < totalCount
+    });
+  } catch (error) {
+    console.error('Error fetching most viewed products:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 // --- SERVER INITIALIZATION ---
 
 async function startServer() {

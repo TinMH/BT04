@@ -1,5 +1,9 @@
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
 import sequelize from './config/db.js';
 import { Category, Product, Comment, Promotion, Article, Member } from './models/index.js';
+
+dotenv.config();
 
 const categoriesData = [
   { id: 'all', name: 'Tất cả Layout' },
@@ -117,6 +121,7 @@ const productsData = [
     ],
     stock: 15,
     soldCount: 342,
+    viewCount: 1542,
     rating: 4.9,
     categoryId: '75-percent',
     size: '75%',
@@ -140,6 +145,7 @@ const productsData = [
     ],
     stock: 8,
     soldCount: 89,
+    viewCount: 890,
     rating: 4.7,
     categoryId: '60-percent',
     size: '60%',
@@ -162,6 +168,7 @@ const productsData = [
     ],
     stock: 24,
     soldCount: 156,
+    viewCount: 1210,
     rating: 4.8,
     categoryId: 'tkl-layout',
     size: '80% (TKL)',
@@ -185,6 +192,7 @@ const productsData = [
     ],
     stock: 4,
     soldCount: 42,
+    viewCount: 654,
     rating: 5.0,
     categoryId: 'ergo-alice',
     size: 'Alice / Ergonomic',
@@ -207,6 +215,7 @@ const productsData = [
     ],
     stock: 30,
     soldCount: 210,
+    viewCount: 1320,
     rating: 4.6,
     categoryId: 'fullsize-1800',
     size: 'Fullsize / 98%',
@@ -229,6 +238,7 @@ const productsData = [
     ],
     stock: 0, // Out of stock!
     soldCount: 135,
+    viewCount: 712,
     rating: 4.8,
     categoryId: '65-percent',
     size: '65%',
@@ -236,6 +246,94 @@ const productsData = [
     connectivity: 'Kết nối dây Type-C',
     features: 'Vỏ nhôm CNC Anodized đen nhám, Stab Screw-in chống lọc xọc cực đỉnh, Led RGB South-facing, Keycaps PBT Double-shot Ninja ký tự phụ bên hông',
     tags: ['Khuyến mãi']
+  },
+  {
+    id: 'nebula-tkl-rgb',
+    name: 'Nebula TKL RGB',
+    tagline: 'Stunning RGB Backlit TKL Powerhouse',
+    description: 'Bàn phím TKL thiết kế viền siêu mỏng, nổi bật với hệ thống LED RGB vô cùng rực rỡ với 18 chế độ sáng khác nhau. Switch Gateron Pro Yellow gõ mượt mà lôi cuốn.',
+    price: 2100000,
+    originalPrice: 2400000,
+    discount: 12,
+    images: [
+      'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&q=80'
+    ],
+    stock: 12,
+    soldCount: 95,
+    viewCount: 620,
+    rating: 4.7,
+    categoryId: 'tkl-layout',
+    size: '80% (TKL)',
+    switchType: 'Linear (Êm Ái, Trơn Tru)',
+    connectivity: 'Dây Type-C rời',
+    features: 'Khung nhôm cực bền, LED RGB 16.8 triệu màu, Keycap ABS Double-shot xuyên LED',
+    tags: ['Mới nhất', 'Khuyến mãi']
+  },
+  {
+    id: 'vortex-core-60',
+    name: 'Vortex Core 60',
+    tagline: 'Ultra Mini Mechanical Keyboard',
+    description: 'Bố cục 60% cực nhỏ gọn thích hợp mang theo du lịch, làm việc quán cafe. Mạch hotswap 5-pin cùng stabilizer đã lube mượt mà êm ái.',
+    price: 1650000,
+    originalPrice: 1850000,
+    discount: 10,
+    images: [
+      'https://images.unsplash.com/photo-1601445638532-3c6f6c3aa1d6?auto=format&fit=crop&w=800&q=80'
+    ],
+    stock: 15,
+    soldCount: 74,
+    viewCount: 450,
+    rating: 4.5,
+    categoryId: '60-percent',
+    size: '60%',
+    switchType: 'Tactile (Khấc Cản, Đầm Tay)',
+    connectivity: '3 Chế độ (Dây, Bluetooth, 2.4G)',
+    features: 'Vỏ nhựa ABS cứng cáp, Hotswap 5-pin, Foam Mod sẵn cực kỳ êm tai',
+    tags: ['Khuyến mãi']
+  },
+  {
+    id: 'apex-ergo-split',
+    name: 'Apex Ergo Split Alice',
+    tagline: 'Premium Ergonomic Split Custom Keyboard',
+    description: 'Phiên bản đặc biệt của layout Ergo Alice với vỏ nhôm CNC nguyên khối tinh xảo, tạ đồng nặng mang lại âm thanh gõ vô cùng đầm chắc chắn.',
+    price: 3900000,
+    originalPrice: 4200000,
+    discount: 7,
+    images: [
+      'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=800&q=80'
+    ],
+    stock: 5,
+    soldCount: 18,
+    viewCount: 320,
+    rating: 4.9,
+    categoryId: 'ergo-alice',
+    size: 'Alice / Ergonomic',
+    switchType: 'Linear (Êm Ái, Trơn Tru)',
+    connectivity: 'Cáp rời Type-C',
+    features: 'Layout Alice công thái học, Vỏ nhôm CNC, Plate FR4 Flex-cut, Lube tay tỉ mỉ',
+    tags: ['Mới nhất']
+  },
+  {
+    id: 'titan-108-fullsize',
+    name: 'Titan 108 Fullsize Keyboard',
+    tagline: 'Absolute Typing Experience',
+    description: 'Bàn phím đầy đủ 108 phím mang lại sự tiện nghi tối đa cho người gõ. Trang bị vỏ đúc hai lớp và hệ thống Foam cách âm Poron tối tân.',
+    price: 2950000,
+    originalPrice: 3200000,
+    discount: 7,
+    images: [
+      'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&q=80'
+    ],
+    stock: 8,
+    soldCount: 112,
+    viewCount: 780,
+    rating: 4.8,
+    categoryId: 'fullsize-1800',
+    size: '100% Fullsize',
+    switchType: 'Tactile (Khấc Cản, Đầm Tay)',
+    connectivity: '3 Chế độ (Dây, Bluetooth, 2.4G)',
+    features: 'Đầy đủ 108 phím cơ, Hotswap mạch xuôi, Led RGB 16 triệu màu, Núm xoay đa phương tiện',
+    tags: ['Bán chạy nhất']
   }
 ];
 
@@ -265,7 +363,18 @@ const commentsData = [
 
 async function seed() {
   try {
-    console.log('--- Connecting to SQLite database ---');
+    console.log('--- Checking & Creating MySQL Database if not exists ---');
+    const connection = await mysql.createConnection({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+    });
+    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME || 'forgekeyboards'}\`;`);
+    await connection.end();
+    console.log('Database checked/created.');
+
+    console.log('--- Connecting to MySQL database ---');
     await sequelize.authenticate();
     console.log('Database connection authenticated.');
 

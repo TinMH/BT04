@@ -65,6 +65,10 @@ export const Product = sequelize.define('Product', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+  viewCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
   rating: {
     type: DataTypes.FLOAT,
     defaultValue: 0.0,
