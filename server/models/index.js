@@ -7,24 +7,31 @@ import Article from './Article.js';
 import Member from './Member.js';
 import Order from './Order.js';
 import OrderItem from './OrderItem.js';
+import CartItem from './CartItem.js';
 
-// --- ASSOCIATIONS & RELATIONSHIPS ---
 
-// Category <-> Product
 Category.hasMany(Product, { foreignKey: 'categoryId' });
 Product.belongsTo(Category, { foreignKey: 'categoryId' });
 
-// Product <-> Comment
 Product.hasMany(Comment, { foreignKey: 'productId', as: 'comments', onDelete: 'CASCADE' });
 Comment.belongsTo(Product, { foreignKey: 'productId' });
 
-// Order <-> OrderItem
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items', onDelete: 'CASCADE' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 
-// OrderItem <-> Product
 Product.hasMany(OrderItem, { foreignKey: 'productId' });
 OrderItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+
+// CartItem Associations
+Product.hasMany(CartItem, { foreignKey: 'productId', onDelete: 'CASCADE' });
+CartItem.belongsTo(Product, { foreignKey: 'productId', as: 'product' });
+
+Member.hasMany(CartItem, { foreignKey: 'username', sourceKey: 'username', onDelete: 'CASCADE' });
+CartItem.belongsTo(Member, { foreignKey: 'username', targetKey: 'username' });
+
+// Order-Member Associations
+Member.hasMany(Order, { foreignKey: 'username', sourceKey: 'username' });
+Order.belongsTo(Member, { foreignKey: 'username', targetKey: 'username' });
 
 export {
   Category,
@@ -35,6 +42,7 @@ export {
   Member,
   Order,
   OrderItem,
+  CartItem,
 };
 
 export default {
@@ -46,4 +54,5 @@ export default {
   Member,
   Order,
   OrderItem,
+  CartItem,
 };

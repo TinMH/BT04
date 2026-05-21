@@ -153,7 +153,7 @@ export const CheckoutService = {
   },
 
   // Process checkout order using SQLite Database connection
-  processOrder: async (cart, appliedCoupon, shippingInfo) => {
+  processOrder: async (cart, appliedCoupon, shippingInfo, username, sessionId, paymentMethod, paymentStatus) => {
     CheckoutService.validateShipping(shippingInfo.name, shippingInfo.phone, shippingInfo.address);
     
     if (cart.length === 0) {
@@ -161,7 +161,15 @@ export const CheckoutService = {
     }
 
     // Call database to compile order and update stock
-    return await OrderRepository.createOrder(cart, appliedCoupon, shippingInfo);
+    return await OrderRepository.createOrder(
+      cart, 
+      appliedCoupon, 
+      shippingInfo, 
+      username, 
+      sessionId, 
+      paymentMethod, 
+      paymentStatus
+    );
   }
 };
 
@@ -197,5 +205,75 @@ export const ReviewService = {
       rating: Number(rating),
       content: content.trim()
     });
+  }
+};
+
+export const OrderTrackingService = {
+  // Check cancellation eligibility for an order
+  getCancellationStatus: (order) => {
+    if (!order) return { canCancelDirect: false, canRequestCancel: false, timeLeftText: '' };
+    if (order.status === 6) return { canCancelDirect: false, canRequestCancel: false, timeLeftText: 'Đơn hàng đã được hủy.' };
+    if (order.status === 4 || order.status === 5) {
+      return { canCancelDirect: false, canRequestCancel: false, timeLeftText: 'Không thể hủy đơn hàng đang giao hoặc đã giao thành công.' };
+    }
+
+    const orderTime = new Date(order.createdAt).getTime();
+    const elapsedMs = Date.now() - orderTime;
+    const elapsedMins = elapsedMs / (60 * 1000);
+    const limitMins = 30;
+
+    if (elapsedMins > limitMins) {
+      return {
+        canCancelDirect: false,
+        canRequestCancel: false,
+        timeLeftText: 'Đã quá hạn 30 phút để hủy đơn hàng này.'
+      };
+    }
+
+    const remainingMs = (limitMins * 60 * 1000) - elapsedMs;
+    const remMins = Math.floor(remainingMs / (60 * 1000));
+    const remSecs = Math.floor((remainingMs % (60 * 1000)) / 1000);
+    const timeLeftText = `Thời gian tự hủy còn: ${remMins} phút ${remSecs} giây`;
+
+    if (order.status === 1 || order.status === 2) {
+      return {
+        canCancelDirect: true,
+        canRequestCancel: false,
+        timeLeftText
+      };
+    }
+
+    if (order.status === 3) {
+      return {
+        canCancelDirect: false,
+        canRequestCancel: true,
+        timeLeftText: `${timeLeftText} (Cần gửi yêu cầu phê duyệt hủy đơn)`
+      };
+    }
+
+    return { canCancelDirect: false, canRequestCancel: false, timeLeftText: '' };
+  },
+
+  // Map status integer to readable Vietnamese text and color
+  getStatusDetails: (status, cancelRequested) => {
+    switch (status) {
+      case 1:
+        return { text: 'Đơn hàng mới', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' };
+      case 2:
+        return { text: 'Đã xác nhận', color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' };
+      case 3:
+        return { 
+          text: cancelRequested ? 'Đang chuẩn bị (Yêu cầu hủy)' : 'Shop đang chuẩn bị hàng', 
+          color: cancelRequested ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 animate-pulse' : 'text-purple-400 bg-purple-500/10 border-purple-500/20' 
+        };
+      case 4:
+        return { text: 'Đang giao hàng', color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' };
+      case 5:
+        return { text: 'Đã giao thành công', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' };
+      case 6:
+        return { text: 'Đã hủy đơn hàng', color: 'text-red-400 bg-red-500/10 border-red-500/20' };
+      default:
+        return { text: 'Không xác định', color: 'text-slate-400 bg-slate-500/10 border-slate-500/20' };
+    }
   }
 };

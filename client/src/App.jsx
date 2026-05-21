@@ -28,6 +28,9 @@ import CartDrawer from './components/CartDrawer';
 import InvoiceModal from './components/InvoiceModal';
 import CategoryLazyLoad from './components/CategoryLazyLoad';
 import TopProductsHorizontal from './components/TopProductsHorizontal';
+import PaymentSimModal from './components/PaymentSimModal';
+import OrderHistory from './components/OrderHistory';
+import AdminPanel from './components/AdminPanel';
 
 // Icons for App Layout
 import { 
@@ -94,12 +97,25 @@ export default function App() {
   const [checkoutError, setCheckoutError] = useState('');
   const [activeInvoice, setActiveInvoice] = useState(null);
 
+  // App Session Guest identification & payment simulation states
+  const [sessionId, setSessionId] = useState('');
+  const [showMomoModal, setShowMomoModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('COD');
+
   // Flash Sale Countdown timers
   const [timeLeft, setTimeLeft] = useState({ hours: 2, minutes: 45, seconds: 30 });
 
   // --- EFFECT HYDRATION (DAL INVOCATIONS) ---
   
   useEffect(() => {
+    // Generate/Load sessionId first
+    let sessId = localStorage.getItem('forge_session_id');
+    if (!sessId) {
+      sessId = 'sess-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('forge_session_id', sessId);
+    }
+    setSessionId(sessId);
+
     // Load databases in DAL asynchronously from SQLite Express API
     const loadData = async () => {
       try {
@@ -116,8 +132,10 @@ export default function App() {
         setArticles(aData);
 
         // Read active user session
+        let activeUser = null;
         const session = SessionRepository.loadSession();
         if (session) {
+          activeUser = session;
           setCurrentUser(session);
           setCommentUser(session.name);
           
@@ -129,16 +147,16 @@ export default function App() {
             }
           }
         }
+
+        // Fetch Cart from API using username or sessionId
+        const initialCart = await CartRepository.getCart(activeUser?.username, sessId);
+        setCart(initialCart);
       } catch (error) {
         console.error("Error loading initial data from database backend:", error);
       }
     };
 
     loadData();
-
-    // Read persistent shopping cart
-    const savedCart = CartRepository.loadCart();
-    setCart(savedCart);
   }, []);
 
   // Flash sale clock countdown effect
@@ -158,15 +176,6 @@ export default function App() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Sync cart adjustments back to DAL
-  useEffect(() => {
-    if (cart.length > 0) {
-      CartRepository.saveCart(cart);
-    } else {
-      localStorage.removeItem('forge_cart');
-    }
-  }, [cart]);
 
   // --- BUSINESS ACTION HANDLERS (BLL INVOCATIONS) ---
 
@@ -263,6 +272,17 @@ export default function App() {
         }
       }
 
+      // Merge guest cart with user cart in backend
+      try {
+        const mergedCart = await CartRepository.mergeCart(sessionId, member.username);
+        setCart(mergedCart);
+      } catch (mergeErr) {
+        console.error("Cart merge failed:", mergeErr);
+        // Fallback: load user's cart from API
+        const userCart = await CartRepository.getCart(member.username, null);
+        setCart(userCart);
+      }
+
       // Close login modal
       setShowLoginModal(false);
       setLoginUsername('');
@@ -273,39 +293,38 @@ export default function App() {
   };
 
   // Sign Out handler
-  const handleLogout = () => {
+  const handleLogout = async () => {
     SessionRepository.clearSession();
     setCurrentUser(null);
     setCommentUser('');
     setAppliedCoupon(null);
     setCouponInput('');
+    setView('home');
+    try {
+      const guestCart = await CartRepository.getCart(null, sessionId);
+      setCart(guestCart);
+    } catch (err) {
+      setCart([]);
+    }
   };
 
-  // Add keys to cart with stock validation
-  const handleAddToCart = (product, qty = 1, silent = false) => {
+  // Add keys to cart with stock validation using backend database API
+  const handleAddToCart = async (product, qty = 1, silent = false) => {
     try {
       // Validate stock bounds using BLL rules
       CartService.validateAddToCart(product, configSwitch, configColorway, qty, cart);
       
-      const itemInCartIndex = cart.findIndex(
-        item => item.product.id === product.id && 
-        item.switchType === configSwitch && 
-        item.colorway === configColorway
+      const username = currentUser?.username || null;
+      const dbCart = await CartRepository.addToCart(
+        username,
+        sessionId,
+        product.id,
+        configSwitch,
+        configColorway,
+        qty
       );
-
-      let updatedCart = [...cart];
-      if (itemInCartIndex > -1) {
-        updatedCart[itemInCartIndex].quantity += qty;
-      } else {
-        updatedCart.push({
-          product,
-          switchType: configSwitch,
-          colorway: configColorway,
-          quantity: qty
-        });
-      }
-
-      setCart(updatedCart);
+      setCart(dbCart);
+      
       if (!silent) {
         setShowCartModal(true);
       }
@@ -337,10 +356,30 @@ export default function App() {
   };
 
   // Confirm shipping checkout and reduce stock levels
-  const handleCheckoutSubmit = async () => {
+  const handleCheckoutSubmit = async (method) => {
     setCheckoutError('');
     try {
-      // BLL handles calculations, validations, and database order placement
+      // Validate shipping fields using BLL
+      CheckoutService.validateShipping(shippingName, shippingPhone, shippingAddress);
+      
+      if (cart.length === 0) {
+        throw new Error('Giỏ hàng đang trống!');
+      }
+
+      if (method === 'MoMo') {
+        setShowMomoModal(true);
+      } else {
+        await executeOrderPlacement('COD', 'Pending');
+      }
+    } catch (err) {
+      setCheckoutError(err.message);
+    }
+  };
+
+  const executeOrderPlacement = async (method, paymentStatus) => {
+    setCheckoutError('');
+    try {
+      const username = currentUser?.username || null;
       const { invoice, updatedProducts } = await CheckoutService.processOrder(
         cart,
         appliedCoupon,
@@ -349,7 +388,11 @@ export default function App() {
           phone: shippingPhone,
           address: shippingAddress,
           note: shippingNote
-        }
+        },
+        username,
+        sessionId,
+        method,
+        paymentStatus
       );
 
       // Success branch: update components state
@@ -364,8 +407,18 @@ export default function App() {
       setShippingNote('');
       setAppliedCoupon(null);
       setShowCartModal(false);
+      setShowMomoModal(false);
     } catch (err) {
       setCheckoutError(err.message);
+      throw err;
+    }
+  };
+
+  const handleMomoPaymentSuccess = async (transferDesc) => {
+    try {
+      await executeOrderPlacement('MoMo', 'Paid');
+    } catch (err) {
+      alert(err.message || 'Lỗi xử lý đặt hàng sau khi thanh toán');
     }
   };
 
@@ -634,6 +687,19 @@ export default function App() {
           />
         )}
 
+        {view === 'orders' && (
+          <OrderHistory 
+            currentUser={currentUser}
+            setView={setView}
+          />
+        )}
+
+        {view === 'admin' && currentUser && currentUser.role === 'Quản trị viên' && (
+          <AdminPanel 
+            setView={setView}
+          />
+        )}
+
       </main>
 
       {/* --- FLOATING PRESENTATION OVERLAYS (PL) --- */}
@@ -678,12 +744,23 @@ export default function App() {
         handleCheckout={handleCheckoutSubmit}
         bill={bill}
         currentUser={currentUser}
+        sessionId={sessionId}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
       />
 
       {/* simulated COD Checkout Success Receipt */}
       <InvoiceModal 
         invoice={activeInvoice}
         onClose={() => setActiveInvoice(null)}
+      />
+
+      {/* MoMo E-Wallet payment simulation */}
+      <PaymentSimModal 
+        isOpen={showMomoModal}
+        onClose={() => setShowMomoModal(false)}
+        totalAmount={bill.total}
+        onPaymentSuccess={handleMomoPaymentSuccess}
       />
 
       {/* Premium Footer */}

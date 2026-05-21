@@ -41,6 +41,30 @@ export const Order = sequelize.define('Order', {
   total: {
     type: DataTypes.INTEGER,
     allowNull: false,
+  },
+  username: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  paymentMethod: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'COD',
+  },
+  paymentStatus: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'Pending',
+  },
+  status: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1, // 1: Mới, 2: Đã xác nhận, 3: Đang chuẩn bị hàng, 4: Đang giao, 5: Đã giao thành công, 6: Đã hủy
+  },
+  cancelRequested: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
   }
 }, {
   timestamps: true,

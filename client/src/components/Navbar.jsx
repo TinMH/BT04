@@ -67,6 +67,20 @@ export default function Navbar({
           >
             Sản Phẩm Mới
           </button>
+          <button 
+            onClick={() => { setView('orders'); }} 
+            className={`hover:text-purple-400 transition-colors duration-200 cursor-pointer ${view === 'orders' ? 'text-purple-400 font-bold' : ''}`}
+          >
+            Đơn Hàng
+          </button>
+          {currentUser && currentUser.role === 'Quản trị viên' && (
+            <button 
+              onClick={() => { setView('admin'); }} 
+              className={`hover:text-purple-400 transition-colors duration-200 cursor-pointer ${view === 'admin' ? 'text-purple-400 font-bold' : ''}`}
+            >
+              Quản Trị
+            </button>
+          )}
         </nav>
 
         {/* Action Tools (Search, Member & Cart) */}

@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import sequelize from './config/db.js';
-import { Category, Product, Comment, Promotion, Article, Member } from './models/index.js';
+import { Category, Product, Comment, Promotion, Article, Member, CartItem } from './models/index.js';
 
 dotenv.config();
 

@@ -146,12 +146,12 @@ export const MemberRepository = {
 };
 
 export const OrderRepository = {
-  createOrder: async (cart, appliedCoupon, shippingInfo) => {
+  createOrder: async (cart, appliedCoupon, shippingInfo, username, sessionId, paymentMethod, paymentStatus) => {
     try {
       const response = await fetch(`${API_BASE_URL}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cart, appliedCoupon, shippingInfo })
+        body: JSON.stringify({ cart, appliedCoupon, shippingInfo, username, sessionId, paymentMethod, paymentStatus })
       });
       if (!response.ok) {
         const err = await response.json();
@@ -162,19 +162,166 @@ export const OrderRepository = {
       console.error("Error placing order", e);
       throw e;
     }
+  },
+
+  getUserOrders: async (username) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders?username=${username}`);
+      if (!response.ok) throw new Error('Không thể tải lịch sử đơn hàng');
+      return await response.json();
+    } catch (e) {
+      console.error("Error fetching user orders", e);
+      throw e;
+    }
+  },
+
+  trackOrder: async (orderId, phone) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders/track?orderId=${orderId}&phone=${phone}`);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Không thể tra cứu đơn hàng');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Error tracking order", e);
+      throw e;
+    }
+  },
+
+  cancelOrder: async (orderId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders/${orderId}/cancel`, {
+        method: 'POST'
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Không thể yêu cầu hủy đơn hàng');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Error canceling order", e);
+      throw e;
+    }
+  },
+
+  adminGetAllOrders: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/orders`);
+      if (!response.ok) throw new Error('Không thể tải toàn bộ đơn hàng (admin)');
+      return await response.json();
+    } catch (e) {
+      console.error("Error getting admin orders", e);
+      throw e;
+    }
+  },
+
+  adminUpdateOrderStatus: async (orderId, status, cancelAction) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, cancelAction })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Không thể cập nhật trạng thái đơn hàng (admin)');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Error updating admin order status", e);
+      throw e;
+    }
   }
 };
 
 export const CartRepository = {
-  // Load persistent cart items
-  loadCart: () => {
-    const saved = localStorage.getItem('forge_cart');
-    return saved ? JSON.parse(saved) : [];
+  getCart: async (username, sessionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart?username=${username || ''}&sessionId=${sessionId || ''}`);
+      if (!response.ok) throw new Error('Không thể tải giỏ hàng từ API');
+      return await response.json();
+    } catch (e) {
+      console.error("Error fetching cart from backend", e);
+      throw e;
+    }
   },
 
-  // Save cart state
-  saveCart: (cart) => {
-    localStorage.setItem('forge_cart', JSON.stringify(cart));
+  addToCart: async (username, sessionId, productId, switchType, colorway, quantity) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, sessionId, productId, switchType, colorway, quantity })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Không thể thêm vào giỏ hàng');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Error adding cart item", e);
+      throw e;
+    }
+  },
+
+  updateQty: async (id, quantity, username, sessionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity, username, sessionId })
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Không thể cập nhật số lượng');
+      }
+      return await response.json();
+    } catch (e) {
+      console.error("Error updating cart quantity", e);
+      throw e;
+    }
+  },
+
+  removeItem: async (id, username, sessionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart/${id}?username=${username || ''}&sessionId=${sessionId || ''}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Không thể xóa sản phẩm khỏi giỏ hàng');
+      return await response.json();
+    } catch (e) {
+      console.error("Error deleting cart item", e);
+      throw e;
+    }
+  },
+
+  clearCart: async (username, sessionId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart?username=${username || ''}&sessionId=${sessionId || ''}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) throw new Error('Không thể xóa sạch giỏ hàng');
+      return await response.json();
+    } catch (e) {
+      console.error("Error clearing cart", e);
+      throw e;
+    }
+  },
+
+  mergeCart: async (sessionId, username) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cart/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, username })
+      });
+      if (!response.ok) throw new Error('Không thể gộp giỏ hàng');
+      return await response.json();
+    } catch (e) {
+      console.error("Error merging cart", e);
+      throw e;
+    }
   }
 };
 

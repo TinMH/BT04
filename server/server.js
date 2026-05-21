@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import sequelize from './config/db.js';
-import { Category, Product, Comment, Promotion, Article, Member, Order, OrderItem } from './models/index.js';
+import { Category, Product, Comment, Promotion, Article, Member, Order, OrderItem, CartItem } from './models/index.js';
 
 dotenv.config();
 
@@ -168,7 +168,7 @@ app.post('/api/auth/login', async (req, res) => {
 
 // 7. Order Placement Endpoint (Checkout)
 app.post('/api/orders', async (req, res) => {
-  const { cart, appliedCoupon, shippingInfo } = req.body;
+  const { cart, appliedCoupon, shippingInfo, username, sessionId, paymentMethod, paymentStatus } = req.body;
 
   if (!cart || cart.length === 0) {
     return res.status(400).json({ message: 'Giỏ hàng đang trống!' });
@@ -244,7 +244,12 @@ app.post('/api/orders', async (req, res) => {
       subtotal,
       discount,
       coupon: appliedCoupon ? appliedCoupon.id : null,
-      total
+      total,
+      username: username || null,
+      paymentMethod: paymentMethod || 'COD',
+      paymentStatus: paymentStatus || 'Pending',
+      status: 1, // Mới
+      cancelRequested: false
     }, { transaction });
 
     // 3. Create OrderItems in Database
@@ -260,9 +265,20 @@ app.post('/api/orders', async (req, res) => {
       await product.save({ transaction });
     }
 
+    // 5. Clear cart in database
+    if (username) {
+      await CartItem.destroy({
+        where: { username }
+      }, { transaction });
+    } else if (sessionId) {
+      await CartItem.destroy({
+        where: { sessionId }
+      }, { transaction });
+    }
+
     await transaction.commit();
 
-    // 5. Build Invoice matching frontend's structure
+    // 6. Build Invoice matching frontend's structure
     const invoice = {
       orderId,
       date: orderDate,
@@ -276,7 +292,11 @@ app.post('/api/orders', async (req, res) => {
       subtotal,
       discount,
       coupon: appliedCoupon ? appliedCoupon.id : null,
-      total
+      total,
+      username: username || null,
+      paymentMethod: paymentMethod || 'COD',
+      paymentStatus: paymentStatus || 'Pending',
+      status: 1
     };
 
     // Fetch updated product catalog
@@ -407,6 +427,456 @@ app.get('/api/products/most-viewed', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching most viewed products:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// --- CART API ENDPOINTS ---
+
+// A. GET /api/cart
+app.get('/api/cart', async (req, res) => {
+  const { username, sessionId } = req.query;
+  if (!username && !sessionId) {
+    return res.status(400).json({ message: 'Vui lòng cung cấp username hoặc sessionId.' });
+  }
+  try {
+    const whereClause = username ? { username } : { sessionId };
+    const cartItems = await CartItem.findAll({
+      where: whereClause,
+      include: [{
+        model: Product,
+        as: 'product',
+        include: [{
+          model: Comment,
+          as: 'comments',
+        }]
+      }],
+      order: [['createdAt', 'ASC']]
+    });
+    res.json(cartItems);
+  } catch (error) {
+    console.error('Error fetching cart:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// B. POST /api/cart
+app.post('/api/cart', async (req, res) => {
+  const { username, sessionId, productId, switchType, colorway, quantity } = req.body;
+  if (!productId || !switchType || !colorway) {
+    return res.status(400).json({ message: 'Thông tin sản phẩm thêm vào giỏ không đầy đủ.' });
+  }
+  if (!username && !sessionId) {
+    return res.status(400).json({ message: 'Cần có username hoặc sessionId để định danh giỏ hàng.' });
+  }
+  try {
+    const product = await Product.findByPk(productId);
+    if (!product) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm.' });
+    }
+
+    const whereClause = username 
+      ? { username, productId, switchType, colorway } 
+      : { sessionId, productId, switchType, colorway };
+
+    let cartItem = await CartItem.findOne({ where: whereClause });
+    const requestQty = quantity || 1;
+
+    if (cartItem) {
+      const newQty = cartItem.quantity + requestQty;
+      if (newQty > product.stock) {
+        return res.status(400).json({ message: `Kho hàng chỉ còn ${product.stock} chiếc. Bạn đang có ${cartItem.quantity} chiếc trong giỏ. Không thể thêm tiếp!` });
+      }
+      cartItem.quantity = newQty;
+      await cartItem.save();
+    } else {
+      if (requestQty > product.stock) {
+        return res.status(400).json({ message: `Kho hàng chỉ còn ${product.stock} chiếc. Không thể đặt thêm!` });
+      }
+      cartItem = await CartItem.create({
+        username: username || null,
+        sessionId: sessionId || null,
+        productId,
+        switchType,
+        colorway,
+        quantity: requestQty
+      });
+    }
+
+    // Return the updated cart items
+    const queryWhere = username ? { username } : { sessionId };
+    const updatedCart = await CartItem.findAll({
+      where: queryWhere,
+      include: [{ model: Product, as: 'product' }]
+    });
+    res.json(updatedCart);
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// C. PUT /api/cart/:id
+app.put('/api/cart/:id', async (req, res) => {
+  const { id } = req.params;
+  const { quantity, username, sessionId } = req.body;
+  if (quantity === undefined || quantity <= 0) {
+    return res.status(400).json({ message: 'Số lượng phải lớn hơn 0.' });
+  }
+  try {
+    const cartItem = await CartItem.findByPk(id, {
+      include: [{ model: Product, as: 'product' }]
+    });
+    if (!cartItem) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm trong giỏ hàng.' });
+    }
+
+    if (quantity > cartItem.product.stock) {
+      return res.status(400).json({ message: `Kho hàng chỉ còn ${cartItem.product.stock} chiếc. Không thể tăng thêm!` });
+    }
+
+    cartItem.quantity = quantity;
+    await cartItem.save();
+
+    const queryWhere = username ? { username } : { sessionId: sessionId || cartItem.sessionId };
+    const updatedCart = await CartItem.findAll({
+      where: queryWhere,
+      include: [{ model: Product, as: 'product' }]
+    });
+    res.json(updatedCart);
+  } catch (error) {
+    console.error('Error updating cart item:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// D. DELETE /api/cart/:id
+app.delete('/api/cart/:id', async (req, res) => {
+  const { id } = req.params;
+  const { username, sessionId } = req.query;
+  try {
+    const cartItem = await CartItem.findByPk(id);
+    if (!cartItem) {
+      return res.status(404).json({ message: 'Không tìm thấy sản phẩm trong giỏ hàng.' });
+    }
+    const backupSessionId = cartItem.sessionId;
+    const backupUsername = cartItem.username;
+
+    await cartItem.destroy();
+
+    const queryWhere = username ? { username } : { sessionId: sessionId || backupSessionId };
+    const updatedCart = await CartItem.findAll({
+      where: queryWhere,
+      include: [{ model: Product, as: 'product' }]
+    });
+    res.json(updatedCart);
+  } catch (error) {
+    console.error('Error deleting cart item:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// E. POST /api/cart/merge
+app.post('/api/cart/merge', async (req, res) => {
+  const { sessionId, username } = req.body;
+  if (!sessionId || !username) {
+    return res.status(400).json({ message: 'Thiếu thông tin sessionId hoặc username để gộp giỏ hàng.' });
+  }
+  const transaction = await sequelize.transaction();
+  try {
+    // Get all items in guest cart
+    const guestItems = await CartItem.findAll({ where: { sessionId }, transaction });
+    for (const guestItem of guestItems) {
+      // Find matching item in user cart
+      const userItem = await CartItem.findOne({
+        where: {
+          username,
+          productId: guestItem.productId,
+          switchType: guestItem.switchType,
+          colorway: guestItem.colorway
+        },
+        transaction
+      });
+
+      const product = await Product.findByPk(guestItem.productId, { transaction });
+      const maxStock = product ? product.stock : 999;
+
+      if (userItem) {
+        // Merge quantities
+        const mergedQty = Math.min(maxStock, userItem.quantity + guestItem.quantity);
+        userItem.quantity = mergedQty;
+        await userItem.save({ transaction });
+        // Delete guest item
+        await guestItem.destroy({ transaction });
+      } else {
+        // Associate guest item with user
+        guestItem.username = username;
+        guestItem.sessionId = null;
+        await guestItem.save({ transaction });
+      }
+    }
+    await transaction.commit();
+
+    const updatedCart = await CartItem.findAll({
+      where: { username },
+      include: [{ model: Product, as: 'product' }]
+    });
+    res.json(updatedCart);
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error merging cart:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// F. DELETE /api/cart (Clear Cart)
+app.delete('/api/cart', async (req, res) => {
+  const { username, sessionId } = req.query;
+  if (!username && !sessionId) {
+    return res.status(400).json({ message: 'Thiếu định danh giỏ hàng để xóa sạch.' });
+  }
+  try {
+    const whereClause = username ? { username } : { sessionId };
+    await CartItem.destroy({ where: whereClause });
+    res.json([]);
+  } catch (error) {
+    console.error('Error clearing cart:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// --- ORDER & TRACKING API ENDPOINTS ---
+
+// Helper: Auto-confirm orders older than 30 mins
+async function autoConfirmOrders() {
+  try {
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    await Order.update(
+      { status: 2 },
+      {
+        where: {
+          status: 1,
+          createdAt: {
+            [sequelize.Sequelize.Op.lt]: thirtyMinutesAgo
+          }
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Error in autoConfirmOrders:', error);
+  }
+}
+
+// G. GET /api/orders (Lịch sử đơn hàng của User)
+app.get('/api/orders', async (req, res) => {
+  const { username } = req.query;
+  if (!username) {
+    return res.status(400).json({ message: 'Vui lòng cung cấp username.' });
+  }
+  try {
+    await autoConfirmOrders();
+    const orders = await Order.findAll({
+      where: { username },
+      include: [{
+        model: OrderItem,
+        as: 'items',
+        include: [{ model: Product, as: 'product' }]
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching orders:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// H. GET /api/orders/track (Tra cứu đơn hàng)
+app.get('/api/orders/track', async (req, res) => {
+  const { orderId, phone } = req.query;
+  if (!orderId || !phone) {
+    return res.status(400).json({ message: 'Thiếu mã đơn hàng hoặc số điện thoại để tra cứu.' });
+  }
+  try {
+    await autoConfirmOrders();
+    const order = await Order.findOne({
+      where: {
+        orderId: orderId.trim(),
+        customerPhone: phone.trim()
+      },
+      include: [{
+        model: OrderItem,
+        as: 'items',
+        include: [{ model: Product, as: 'product' }]
+      }]
+    });
+
+    if (!order) {
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng với thông tin cung cấp.' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('Error tracking order:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// I. POST /api/orders/:id/cancel (Yêu cầu hủy đơn hàng)
+app.post('/api/orders/:id/cancel', async (req, res) => {
+  const { id } = req.params;
+  const transaction = await sequelize.transaction();
+  try {
+    const order = await Order.findByPk(id, {
+      include: [{ model: OrderItem, as: 'items' }],
+      transaction
+    });
+
+    if (!order) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
+    }
+
+    if (order.status === 6) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Đơn hàng này đã được hủy.' });
+    }
+
+    // Check timeframe: must be within 30 minutes of creation
+    const orderTime = new Date(order.createdAt).getTime();
+    const timeDiffMins = (Date.now() - orderTime) / (60 * 1000);
+
+    if (timeDiffMins > 30) {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Thời hạn hủy đơn đã vượt quá 30 phút. Bạn không thể hủy đơn hàng này.' });
+    }
+
+    // Status checks
+    if (order.status === 1 || order.status === 2) {
+      // Direct cancel
+      order.status = 6;
+      await order.save({ transaction });
+
+      // Restore product stock
+      for (const item of order.items) {
+        const product = await Product.findByPk(item.productId, { transaction });
+        if (product) {
+          product.stock = product.stock + item.quantity;
+          product.soldCount = Math.max(0, product.soldCount - item.quantity);
+          await product.save({ transaction });
+        }
+      }
+
+      await transaction.commit();
+      res.json({ message: 'Hủy đơn hàng thành công và đã hoàn kho.', order });
+    } else if (order.status === 3) {
+      // Send cancel request
+      order.cancelRequested = true;
+      await order.save({ transaction });
+      await transaction.commit();
+      res.json({ message: 'Đơn hàng đang chuẩn bị. Đã gửi yêu cầu hủy đơn cho shop phê duyệt.', order });
+    } else {
+      await transaction.rollback();
+      return res.status(400).json({ message: 'Đơn hàng đang giao hoặc đã giao thành công. Không thể hủy đơn.' });
+    }
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error canceling order:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// --- ADMIN API ENDPOINTS ---
+
+// J. GET /api/admin/orders (Admin lấy tất cả đơn hàng)
+app.get('/api/admin/orders', async (req, res) => {
+  try {
+    await autoConfirmOrders();
+    const orders = await Order.findAll({
+      include: [{
+        model: OrderItem,
+        as: 'items',
+        include: [{ model: Product, as: 'product' }]
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching admin orders:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// K. PUT /api/admin/orders/:id/status (Admin cập nhật trạng thái đơn hàng)
+app.put('/api/admin/orders/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status, cancelAction } = req.body; // cancelAction: 'approve' or 'reject'
+  
+  const transaction = await sequelize.transaction();
+  try {
+    const order = await Order.findByPk(id, {
+      include: [{ model: OrderItem, as: 'items' }],
+      transaction
+    });
+
+    if (!order) {
+      await transaction.rollback();
+      return res.status(404).json({ message: 'Không tìm thấy đơn hàng.' });
+    }
+
+    if (cancelAction) {
+      if (cancelAction === 'approve') {
+        order.status = 6;
+        order.cancelRequested = false;
+        await order.save({ transaction });
+
+        // Restore stock
+        for (const item of order.items) {
+          const product = await Product.findByPk(item.productId, { transaction });
+          if (product) {
+            product.stock = product.stock + item.quantity;
+            product.soldCount = Math.max(0, product.soldCount - item.quantity);
+            await product.save({ transaction });
+          }
+        }
+
+        await transaction.commit();
+        return res.json({ message: 'Đã phê duyệt yêu cầu hủy đơn hàng. Tồn kho đã hoàn lại.', order });
+      } else if (cancelAction === 'reject') {
+        order.cancelRequested = false;
+        await order.save({ transaction });
+        await transaction.commit();
+        return res.json({ message: 'Đã từ chối yêu cầu hủy đơn hàng.', order });
+      }
+    }
+
+    if (status !== undefined) {
+      const oldStatus = order.status;
+      order.status = Number(status);
+      
+      // If changing directly to canceled, restore stock
+      if (Number(status) === 6 && oldStatus !== 6) {
+        for (const item of order.items) {
+          const product = await Product.findByPk(item.productId, { transaction });
+          if (product) {
+            product.stock = product.stock + item.quantity;
+            product.soldCount = Math.max(0, product.soldCount - item.quantity);
+            await product.save({ transaction });
+          }
+        }
+      }
+      await order.save({ transaction });
+      await transaction.commit();
+      return res.json({ message: `Đã cập nhật trạng thái đơn hàng thành công.`, order });
+    }
+
+    await transaction.rollback();
+    res.status(400).json({ message: 'Yêu cầu không hợp lệ.' });
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error updating order status:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
 });

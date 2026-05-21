@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Trash2, Tag, AlertCircle, ShoppingBag, Plus, Minus, CreditCard } from 'lucide-react';
+import { CartRepository } from '../dal/dataAccess';
 
 export default function CartDrawer({
   showCartModal,
@@ -26,27 +27,41 @@ export default function CartDrawer({
   handleRemoveCoupon,
   handleCheckout,
   bill,
-  currentUser
+  currentUser,
+  sessionId,
+  paymentMethod,
+  setPaymentMethod
 }) {
   if (!showCartModal) return null;
 
-  // Decrease quantity in cart
-  const updateQty = (index, delta) => {
-    const updated = [...cart];
-    const newQty = updated[index].quantity + delta;
+  // Decrease quantity in cart using backend database API
+  const updateQty = async (index, delta) => {
+    const item = cart[index];
+    const newQty = item.quantity + delta;
+    const username = currentUser?.username || null;
+    
     if (newQty <= 0) {
-      updated.splice(index, 1);
-    } else if (newQty <= updated[index].product.stock) {
-      updated[index].quantity = newQty;
+      await removeItem(index);
+    } else {
+      try {
+        const updatedCart = await CartRepository.updateQty(item.id, newQty, username, sessionId);
+        setCart(updatedCart);
+      } catch (err) {
+        alert(err.message || 'Không thể cập nhật số lượng');
+      }
     }
-    setCart(updated);
   };
 
-  // Remove item completely
-  const removeItem = (index) => {
-    const updated = [...cart];
-    updated.splice(index, 1);
-    setCart(updated);
+  // Remove item completely using backend database API
+  const removeItem = async (index) => {
+    const item = cart[index];
+    const username = currentUser?.username || null;
+    try {
+      const updatedCart = await CartRepository.removeItem(item.id, username, sessionId);
+      setCart(updatedCart);
+    } catch (err) {
+      alert(err.message || 'Không thể xóa sản phẩm khỏi giỏ hàng');
+    }
   };
 
   return (
@@ -252,7 +267,7 @@ export default function CartDrawer({
             <div className="p-5 border-t border-slate-900 bg-slate-950 space-y-4">
               
               {/* Billing statistics */}
-              <div className="space-y-2 text-xs sm:text-sm text-slate-400 font-semibold">
+              <div className="space-y-2 text-xs sm:text-sm text-slate-400 font-semibold font-sans">
                 <div className="flex justify-between items-center">
                   <span>Tổng phụ sản phẩm:</span>
                   <span className="text-slate-200">{bill.subtotal.toLocaleString()}đ</span>
@@ -274,6 +289,37 @@ export default function CartDrawer({
                 </div>
               </div>
 
+              {/* PAYMENT METHOD SELECTOR */}
+              <div className="space-y-2 pt-2 border-t border-slate-900">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">Hình thức thanh toán</label>
+                <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('COD')}
+                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      paymentMethod === 'COD'
+                        ? 'bg-slate-900 border-purple-500 text-purple-400 shadow-md shadow-purple-500/5'
+                        : 'bg-slate-950 border-slate-850 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="font-bold">COD (Nhận hàng)</span>
+                    <span className="text-[9px] text-slate-500">Thanh toán khi nhận</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('MoMo')}
+                    className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      paymentMethod === 'MoMo'
+                        ? 'bg-slate-900 border-pink-500 text-pink-400 shadow-md shadow-pink-500/5'
+                        : 'bg-slate-950 border-slate-850 text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                    }`}
+                  >
+                    <span className="font-bold">Ví điện tử MoMo</span>
+                    <span className="text-[9px] text-slate-500">Quét mã QR tiện lợi</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Checkout Error */}
               {checkoutError && (
                 <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-900/50 flex items-center gap-2 text-xs text-red-400">
@@ -284,11 +330,19 @@ export default function CartDrawer({
 
               {/* Submission button */}
               <button
-                onClick={handleCheckout}
-                className="w-full h-12 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-750 hover:to-indigo-750 text-white font-bold text-sm tracking-wider shadow-lg hover:shadow-purple-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => handleCheckout(paymentMethod)}
+                className={`w-full h-12 rounded-xl text-white font-bold text-sm tracking-wider shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  paymentMethod === 'MoMo'
+                    ? 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 hover:shadow-pink-500/20'
+                    : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-750 hover:to-indigo-750 hover:shadow-purple-500/20'
+                }`}
               >
                 <CreditCard className="w-4.5 h-4.5" />
-                <span>XÁC NHẬN ĐẶT HÀNG (COD Nhận Hàng Thanh Toán)</span>
+                <span>
+                  {paymentMethod === 'MoMo' 
+                    ? 'TIẾN HÀNH THANH TOÁN QUA VÍ MOMO' 
+                    : 'XÁC NHẬN ĐẶT HÀNG (COD THANH TOÁN)'}
+                </span>
               </button>
 
             </div>
